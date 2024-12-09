@@ -1,362 +1,289 @@
-import { useState, useEffect, useCallback } from 'react'
-import axios from 'axios'
-import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
-import 'leaflet/dist/leaflet.css'
-import L from 'leaflet'
-import { Link } from "react-router-dom";
-import { google_ngrok_url } from '../../utils/global'
-import { MapPin, Search, AlertTriangle, Stethoscope, Pill, FileText, UserPlus } from 'lucide-react'
+import React, { useState } from 'react'
+import { Edit, X, User, Briefcase, MapPin, Phone, Mail, Camera, QrCode } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 
-const DoctorIcon = new L.Icon({
-  iconUrl: 'modiji.svg',
-  iconAnchor: [44, 60],
-  popupAnchor: [1, -34],
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.3.1/images/marker-shadow.png',
-  shadowSize: [41, 41],
-  iconSize: [80, 100],
-});
-
-const dummyDoctors = [
-  { id: 1, name: "Dr. Sanika", specialty: "General Physician", address: "123 MG Road, Bangalore, Karnataka", latitude: 12.9716, longitude: 77.5946 },
-  { id: 2, name: "Dr. Nishikant", specialty: "Pediatrician", address: "456 Anna Salai, Chennai, Tamil Nadu", latitude: 13.0827, longitude: 80.2707 },
-  { id: 3, name: "Mc. Rohit Seshmukh", specialty: "Church priest", address: "789 SV Road, Mumbai, Maharashtra", latitude: 19.0760, longitude: 72.8777 },
-  { id: 4, name: "Dr. Rehan 👁️sha", specialty: "Gynecologist", address: "101 Camac Street, Kolkata, West Bengal", latitude: 22.5726, longitude: 88.3639 },
-  { id: 5, name: "Dr. Rehan", specialty: "Other", address: "16 SV Road, Mumbai, Maharashtra", latitude: 18.5726, longitude: 73.3639 },
-  { id: 6, name: "Dr. Vivek Backender", specialty: "Orthopedic Surgeon", address: "202 Banjara Hills, Hyderabad, Telangana", latitude: 17.4126, longitude: 78.4387 },
-]
-
-function MapUpdater({ center, onMapClick }) {
-  const map = useMap();
-  map.setView(center, 13);
-
-  useMapEvents({
-    click: (e) => {
-      onMapClick(e.latlng);
-    },
-  });
-
-  return null;
+const initialDoctorInfo = {
+  name: "Dr. Nishi Sir",
+  specialization: "Engiologist",
+  experience: "15 years",
+  location: "India, IN",
+  phone: "+91 9819191971",
+  email: "nishi@gmail.com",
+  profilePicture: './doctorpfp.png',
+  qrCodePicture: './dummyqr.png'
 }
 
-export default function DoctorSearch() {
-  const [loading, setLoading] = useState(false)
-  const [doctors, setDoctors] = useState(dummyDoctors)
-  const [filteredDoctors, setFilteredDoctors] = useState(dummyDoctors)
-  const [mapCenter, setMapCenter] = useState([20.5937, 78.9629])
-  const [isBlurred, setIsBlurred] = useState(true)
-  const [error, setError] = useState(null)
-  const [specialtyFilter, setSpecialtyFilter] = useState('')
-  const [currentPage, setCurrentPage] = useState(1)
-  const [selectedDoctor, setSelectedDoctor] = useState(null)
-  const [locationOption, setLocationOption] = useState('current') // Updated
-  const [userLocation, setUserLocation] = useState(null)
-  const doctorsPerPage = 5
-  const [districts] = useState([
-    'Mumbai', 'Delhi', 'Bangalore', 'Hyderabad', 'Chennai', 
-    'Kolkata', 'Pune', 'Ahmedabad', 'Jaipur', 'Lucknow'
-  ])
+export function DoctorProfile() {
+  const [doctorInfo, setDoctorInfo] = useState(initialDoctorInfo)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isQRModalOpen, setIsQRModalOpen] = useState(false)
+  const [tempProfilePicture, setTempProfilePicture] = useState(null)
 
-  const searchNearbyDoctors = useCallback(async (lat, lon) => {
-    setLoading(true)
-    setError(null)
-    try {
-      const response = await axios.post(google_ngrok_url+'/search_doctors', {
-        latitude: lat,
-        longitude: lon
-      })
-
-      if (response.data && response.data.length > 0) {
-        setDoctors(response.data)
-        setFilteredDoctors(response.data)
-      } else {
-        setDoctors([])
-        setFilteredDoctors([])
-        setError('No doctors found in this location.')
-      }
-    } catch (error) {
-      console.error('Error fetching doctors:', error)
-      setError('Failed to fetch nearby doctors. Please try again.')
-    } finally {
-      setLoading(false)
-      setIsBlurred(false)
-    }
-  }, [])
-
-  const handleLocationChange = async (e) => { // Updated
-    const selectedOption = e.target.value;
-    setLocationOption(selectedOption);
-
-    if (selectedOption === 'current') {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords;
-          setMapCenter([latitude, longitude]);
-          searchNearbyDoctors(latitude, longitude);
-        },
-        (error) => {
-          console.error('Error getting current location:', error);
-          setError('Failed to get your current location. Please ensure location services are enabled.');
-        }
-      );
-    } else {
-      const dummyCoordinates = {
-        'Mumbai': [19.0760, 72.8777],
-        'Delhi': [28.6139, 77.2090],
-        'Bangalore': [12.9716, 77.5946],
-        'Hyderabad': [17.3850, 78.4867],
-        'Chennai': [13.0827, 80.2707],
-        'Kolkata': [22.5726, 88.3639],
-        'Pune': [18.5204, 73.8567],
-        'Ahmedabad': [23.0225, 72.5714],
-        'Jaipur': [26.9124, 75.7873],
-        'Lucknow': [26.8467, 80.9462]
-      };
-
-      const [latitude, longitude] = dummyCoordinates[selectedOption] || [20.5937, 78.9629];
-      setMapCenter([latitude, longitude]);
-      searchNearbyDoctors(latitude, longitude);
-    }
-  }
-
-  const handleLocationSearch = async (e) => { // Updated
+  const handleEditSubmit = (e) => {
     e.preventDefault()
-    setLoading(true)
-    setError(null)
+    const formData = new FormData(e.target)
+    const updatedInfo = Object.fromEntries(formData.entries())
+    updatedInfo.profilePicture = tempProfilePicture || doctorInfo.profilePicture
+    setDoctorInfo(updatedInfo)
+    setIsEditModalOpen(false)
+  }
 
-    try {
-      if (locationOption === 'current') {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            const { latitude, longitude } = position.coords
-            setMapCenter([latitude, longitude])
-            searchNearbyDoctors(latitude, longitude)
-          },
-          (error) => {
-            console.error('Error getting current location:', error)
-            setError('Failed to get your current location. Please ensure location services are enabled.')
-            setLoading(false)
-          }
-        )
-      } else {
-        // Use the coordinates set by handleLocationChange
-        await searchNearbyDoctors(mapCenter[0], mapCenter[1])
+  const handleProfilePictureChange = (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setTempProfilePicture(reader.result)
       }
-    } catch (err) {
-      console.error('Error:', err)
-      setError(err.message || 'An error occurred while searching for doctors.')
-      setLoading(false)
+      reader.readAsDataURL(file)
     }
   }
-
-  const handleMapClick = (latlng) => {
-    setMapCenter([latlng.lat, latlng.lng])
-    searchNearbyDoctors(latlng.lat, latlng.lng)
-  }
-
-  useEffect(() => {
-    const filtered = doctors.filter(doctor => 
-      specialtyFilter === '' || doctor.specialty.toLowerCase().includes(specialtyFilter.toLowerCase())
-    )
-    setFilteredDoctors(filtered)
-    setCurrentPage(1)
-  }, [doctors, specialtyFilter])
-
-  const indexOfLastDoctor = currentPage * doctorsPerPage
-  const indexOfFirstDoctor = indexOfLastDoctor - doctorsPerPage
-  const currentDoctors = filteredDoctors.slice(indexOfFirstDoctor, indexOfLastDoctor)
-
-  const paginate = (pageNumber) => setCurrentPage(pageNumber)
 
   return (
-    <div className="min-h-screen bg-[#27428c]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-4xl font-bold text-white text-center mb-4">Your home for health</h1>
-        <h2 className="text-2xl text-white text-center mb-8">Find Your Doctor</h2>
-
-        <div className="bg-white rounded-lg shadow-lg p-4 mb-8">
-          <form onSubmit={handleLocationSearch} className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1 flex items-center gap-2 border-b md:border-b-0 md:border-r border-gray-300 pb-4 md:pb-0 md:pr-4">
-              <MapPin className="text-gray-400" />
-              <select
-                value={locationOption}
-                onChange={handleLocationChange}
-                className="w-full p-2 focus:outline-none"
-              >
-                <option value="current">Use current location</option> 
-                {districts.map((district) => ( 
-                  <option key={district} value={district}>{district}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex-1 flex items-center gap-2">
-              <Search className="text-gray-400" />
-              <input
-                type="text"
-                value={specialtyFilter}
-                onChange={(e) => setSpecialtyFilter(e.target.value)}
-                placeholder="Search doctors, clinics, hospitals, etc."
-                className="w-full p-2 focus:outline-none"
-              />
-            </div>
-            <button type="submit" className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition-colors">
-              Search
-            </button>
-          </form>
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+      {/* Header Background */}
+      <div className="relative">
+        <div className="absolute inset-x-0 top-0 h-[250px] md:h-[350px] bg-gradient-to-br from-blue-500 to-blue-600 rounded-b-[50px] md:rounded-b-[100px]">
+          <div className="absolute bottom-0 left-0 right-0">
+            <svg
+              viewBox="0 0 1440 320"
+              className="w-full h-auto transform translate-y-1"
+              preserveAspectRatio="none"
+            >
+              <path
+                fill="rgb(239 246 255)"
+                fillOpacity="1"
+                d="M0,288L48,272C96,256,192,224,288,197.3C384,171,480,149,576,165.3C672,181,768,235,864,250.7C960,267,1056,245,1152,224C1248,203,1344,181,1392,170.7L1440,160L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"
+              ></path>
+            </svg>
+          </div>
         </div>
 
-        <div className="mb-8">
-          <div className="flex flex-wrap gap-2">
-            {["Dermatologist", "Pediatrician", "Gynecologist", "Other"].map((specialty) => (
-              <button 
-                key={specialty}
-                onClick={() => setSpecialtyFilter(specialty)}
-                className="px-3 py-1 bg-blue-600 text-white text-sm rounded-full hover:bg-blue-700 transition-colors"
+        {/* Profile Content */}
+        <div className="relative pt-12 px-4 md:px-8 max-w-7xl mx-auto">
+          <motion.div 
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="flex flex-col items-center md:flex-row md:items-start md:space-x-8"
+          >
+            {/* Profile Picture */}
+            <div className="relative group">
+              <div className="w-32 h-32 md:w-48 md:h-48 rounded-full border-4 border-white shadow-lg overflow-hidden bg-white">
+                {doctorInfo.profilePicture ? (
+                  <img
+                    src={doctorInfo.profilePicture}
+                    alt={doctorInfo.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-blue-100">
+                    <User className="w-16 h-16 text-blue-400" />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Profile Info */}
+            <div className="mt-6 md:mt-0 text-center md:text-left flex-1">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h1 className="text-2xl md:text-4xl font-bold text-white md:mb-2">{doctorInfo.name}</h1>
+                  <p className="text-lg text-blue-100 mb-4">{doctorInfo.specialization}</p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setIsEditModalOpen(true)}
+                    className="inline-flex items-center px-4 py-2 bg-white text-blue-600 rounded-full shadow-md hover:bg-blue-50 transition-colors duration-200"
+                  >
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit Profile
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setIsQRModalOpen(true)}
+                    className="inline-flex items-center px-4 py-2 bg-white text-blue-600 rounded-full shadow-md hover:bg-blue-50 transition-colors duration-200"
+                  >
+                    <QrCode className="w-4 h-4 mr-2" />
+                    Show QR
+                  </motion.button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Details Grid */}
+          <motion.div 
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="mt-12 md:mt-20 grid grid-cols-1 md:grid-cols-2 gap-6 pb-8"
+          >
+            {[
+              { icon: Briefcase, label: 'Experience', value: doctorInfo.experience },
+              { icon: MapPin, label: 'Location', value: doctorInfo.location },
+              { icon: Phone, label: 'Phone', value: doctorInfo.phone },
+              { icon: Mail, label: 'Email', value: doctorInfo.email },
+            ].map((item, index) => (
+              <motion.div
+                key={index}
+                whileHover={{ scale: 1.03 }}
+                className="flex items-center space-x-4 bg-white p-6 rounded-xl shadow-sm"
               >
-                {specialty}
-              </button>
+                <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-full bg-blue-100">
+                  <item.icon className="w-6 h-6 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">{item.label}</p>
+                  <p className="text-lg font-medium text-gray-900">{item.value}</p>
+                </div>
+              </motion.div>
             ))}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <div className="relative">
-            <div className={`${isBlurred ? 'filter blur-md' : ''}`}>
-              <div className="flex flex-col lg:flex-row gap-8">
-                <div className="lg:w-1/2">
-                  <div className="h-[calc(100vh-300px)] w-full rounded-lg overflow-hidden shadow-lg">
-                    <MapContainer center={mapCenter} zoom={13} style={{ height: '100%', width: '100%' }}>
-                      <TileLayer
-                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                      />
-                      <MapUpdater center={mapCenter} onMapClick={handleMapClick} />
-                      {filteredDoctors.map((doctor) => (
-                        <Marker 
-                          key={doctor.id} 
-                          position={[doctor.latitude, doctor.longitude]} 
-                          icon={DoctorIcon}
-                          eventHandlers={{
-                            click: () => setSelectedDoctor(doctor),
-                          }}
-                        >
-                          <Popup>
-                            <div>
-                              <h3 className="font-bold">{doctor.name}</h3>
-                              <p className="text-sm text-gray-600">{doctor.specialty}</p>
-                              <p className="text-sm">{doctor.address}</p>
-                            </div>
-                          </Popup>
-                        </Marker>
-                      ))}
-                    </MapContainer>
-                  </div>
-                </div>
-
-                <div className="lg:w-1/2">
-                  <h2 className="text-2xl font-bold mb-4">Doctors</h2>
-                  {error && <p className="text-red-500 mb-4">{error}</p>}
-                  <div className="space-y-4 max-h-[calc(100vh-450px)] overflow-y-auto pr-4">
-                    {currentDoctors.map((doctor) => (
-                      <div key={doctor.id} className="bg-gray-100 p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300">
-                        <h3 className="font-bold text-lg text-blue-600">{doctor.name}</h3>
-                        <p className="text-gray-700">{doctor.specialty}</p>
-                        <p className="text-gray-600 text-sm mt-1">{doctor.address}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-4 flex justify-center">
-                    {Array.from({ length: Math.ceil(filteredDoctors.length / doctorsPerPage) }, (_, i) => (
-                      <button
-                        key={i}
-                        onClick={() => paginate(i + 1)}
-                        className={`mx-1 px-3 py-1 rounded ${currentPage === i + 1 ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
-                      >
-                        {i + 1}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {isBlurred && (
-              <div 
-                className="absolute inset-0 flex items-center justify-center z-10 cursor-pointer"
-                onClick={() => setIsBlurred(false)}
-              >
-                <p className="text-2xl font-bold text-gray-800 bg-white bg-opacity-75 p-4 rounded-lg">
-                  Click here to find nearby doctors
-                </p>
-              </div>
-            )}
-
-            {loading && (
-              <div className="absolute inset-0 flex items-center justify-center z-20 bg-white bg-opacity-75">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-              </div>
-            )}
-          </div>
-        </div>
-
-      <div className="bg-[#152a63] py-4 mt-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-center">
-            <Link to="/doctor/login" className="text-white hover:text-gray-200">
-              <div className="flex flex-col items-center">
-                <Stethoscope className="h-6 w-6 mb-1" />
-                <span>Doctor Login</span>
-              </div>
-            </Link>
-            <Link to="/login" className="text-white hover:text-gray-200">
-              <div className="flex flex-col items-center">
-                <Pill className="h-6 w-6 mb-1" />
-                <span>Patient Login</span>
-              </div>
-            </Link>
-            <Link to="/pricing" className="text-white hover:text-gray-200">
-              <div className="flex flex-col items-center">
-                <FileText className="h-6 w-6 mb-1" />
-                <span>Pricing</span>
-              </div>
-            </Link>
-            <a href="#" className="text-white hover:text-gray-200">
-              <div className="flex flex-col items-center">
-                <AlertTriangle className="h-6 w-6 mb-1" />
-                <span>Book test</span>
-              </div>
-            </a>
-            <a href="#" className="text-white hover:text-gray-200">
-              <div className="flex flex-col items-center">
-                <Search className="h-6 w-6 mb-1" />
-                <span>Read articles</span>
-              </div>
-            </a>
-            <Link to="/auth" className="text-white hover:text-gray-200">
-              <div className="flex flex-col items-center">
-                <UserPlus className="h-6 w-6 mb-1" />
-                <span>Get Started</span>
-              </div>
-            </Link>
-          </div>
+          </motion.div>
         </div>
       </div>
 
-      {selectedDoctor && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-30">
-          <div className="bg-white p-6 rounded-lg max-w-md w-full">
-            <h2 className="text-2xl font-bold mb-4">{selectedDoctor.name}</h2>
-            <p><strong>Specialty:</strong> {selectedDoctor.specialty}</p>
-            <p><strong>Address:</strong> {selectedDoctor.address}</p>
-            <button 
-              onClick={() => setSelectedDoctor(null)}
-              className="mt-4 bg-blue-500 text-white px-4 py-2 rounded"
+      {/* Edit Modal */}
+      <AnimatePresence>
+        {isEditModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
             >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
+              <div className="sticky top-0 bg-white px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+                <h2 className="text-xl font-semibold text-gray-900">Edit Profile</h2>
+                <button
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <form onSubmit={handleEditSubmit} className="p-6">
+                <div className="space-y-6">
+                  {/* Profile Picture Upload */}
+                  <div className="flex flex-col items-center">
+                    <div className="w-32 h-32 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden mb-4">
+                      {tempProfilePicture || doctorInfo.profilePicture ? (
+                        <img
+                          src={tempProfilePicture || doctorInfo.profilePicture}
+                          alt="Profile"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <User className="w-16 h-16 text-blue-400" />
+                      )}
+                    </div>
+                    <label className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-full cursor-pointer hover:bg-blue-700 transition-colors duration-200">
+                      <Camera className="w-4 h-4 mr-2" />
+                      Change Picture
+                      <input
+                        type="file"
+                        className="hidden"
+                        onChange={handleProfilePictureChange}
+                        accept="image/*"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Form Fields */}
+                  <div className="space-y-4">
+                    {[
+                      { id: 'name', label: 'Name', type: 'text', value: doctorInfo.name },
+                      { id: 'specialization', label: 'Specialization', type: 'text', value: doctorInfo.specialization },
+                      { id: 'experience', label: 'Experience', type: 'text', value: doctorInfo.experience },
+                      { id: 'location', label: 'Location', type: 'text', value: doctorInfo.location },
+                      { id: 'phone', label: 'Phone', type: 'tel', value: doctorInfo.phone },
+                      { id: 'email', label: 'Email', type: 'email', value: doctorInfo.email },
+                    ].map((field) => (
+                      <div key={field.id}>
+                        <label htmlFor={field.id} className="block text-sm font-medium text-gray-700 mb-1">
+                          {field.label}
+                        </label>
+                        <input
+                          type={field.type}
+                          id={field.id}
+                          name={field.id}
+                          defaultValue={field.value}
+                          className="w-full px-4 py-2 border border-gray-300 text-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Form Actions */}
+                <div className="mt-8 flex justify-end space-x-4">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditModalOpen(false)}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors duration-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* QR Code Modal */}
+      <AnimatePresence>
+        {isQRModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl w-full max-w-md p-6"
+            >
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-900">QR Code</h2>
+                <button
+                  onClick={() => setIsQRModalOpen(false)}
+                  className="text-gray-400 hover:text-gray-500"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              <div className="flex justify-center">
+                <img
+                  src={doctorInfo.qrCodePicture}
+                  alt="Doctor QR Code"
+                  className="w-64 h-64 object-contain"
+                />
+              </div>
+              <p className="mt-4 text-center text-sm text-gray-500">
+                Scan this QR code to quickly access the doctor's information.
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
