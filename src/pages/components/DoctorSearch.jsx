@@ -13,7 +13,7 @@ const initialDoctorInfo = {
   qrCodePicture: './dummyqr.png'
 }
 
-export function DoctorProfile() {
+export default function DoctorProfile() {
   const [doctorInfo, setDoctorInfo] = useState(initialDoctorInfo)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isQRModalOpen, setIsQRModalOpen] = useState(false)
