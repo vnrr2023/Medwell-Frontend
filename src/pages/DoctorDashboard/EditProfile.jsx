@@ -1,10 +1,25 @@
 import React, { useState } from 'react'
-import { User, Camera } from 'lucide-react'
+import { User, Camera, Plus, Trash2 } from 'lucide-react'
+import { google_ngrok_url } from '../../utils/global'
 
 const EditProfile = ({ doctorInfo, onSave, onClose }) => {
   const [activeSection, setActiveSection] = useState('info')
-  const [tempInfo, setTempInfo] = useState({ ...doctorInfo })
+  const [tempInfo, setTempInfo] = useState({
+    ...doctorInfo,
+    addresses: [
+      {
+        address: "India",
+        lat: "40.7128",
+        lon: "-74.0060",
+        address_type: "home"
+      },
+      ...(doctorInfo.addresses || [])
+    ]
+  })
   const [tempProfilePicture, setTempProfilePicture] = useState(null)
+  const [newAddress, setNewAddress] = useState({
+    address: '',
+  })
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -20,6 +35,59 @@ const EditProfile = ({ doctorInfo, onSave, onClose }) => {
       }
       reader.readAsDataURL(file)
     }
+  }
+
+  const handleAddressInputChange = (e) => {
+    const { value } = e.target
+    setNewAddress({ address: value })
+  }
+
+  const handleAddAddress = async () => {
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(newAddress.address)}&format=json`)
+      const data = await response.json()
+      console.log(data)
+      if (data && data.length > 0) {
+        const { lat, lon, addresstype } = data[0]
+        
+        const addressData = {
+          address: newAddress.address,
+          lat,
+          lon,
+          address_type: addresstype
+        }
+        console.log(addressData)
+        const backendResponse = await fetch(google_ngrok_url+'/doctor/add_doctor_address/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(addressData),
+        })
+
+        if (!backendResponse.ok) {
+          throw new Error('Failed to add address')
+        }
+
+        const addedAddress = await backendResponse.json()
+        setTempInfo(prev => ({
+          ...prev,
+          addresses: [...prev.addresses, addedAddress]
+        }))
+        setNewAddress({ address: '' })
+      } else {
+        throw new Error('No results found for the given address')
+      }
+    } catch (error) {
+      console.error('Error adding address:', error)
+    }
+  }
+
+  const handleRemoveAddress = (addressToRemove) => {
+    setTempInfo(prev => ({
+      ...prev,
+      addresses: prev.addresses.filter(addr => addr !== addressToRemove)
+    }))
   }
 
   const handleSave = () => {
@@ -45,7 +113,7 @@ const EditProfile = ({ doctorInfo, onSave, onClose }) => {
         <div className="flex flex-col md:flex-row gap-8">
           <nav className="w-full md:w-1/4">
             <ul className="space-y-2">
-              {['info', 'address', 'picture'].map((section) => (
+              {['info', 'addresses', 'picture'].map((section) => (
                 <li key={section}>
                   <button
                     onClick={() => setActiveSection(section)}
@@ -90,21 +158,34 @@ const EditProfile = ({ doctorInfo, onSave, onClose }) => {
               </div>
             )}
 
-            {activeSection === 'address' && (
+            {activeSection === 'addresses' && (
               <div className="space-y-4">
-                <h2 className="text-2xl font-semibold mb-4">Address Information</h2>
-                <div>
-                  <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">
-                    Location
-                  </label>
+                <h2 className="text-2xl font-semibold mb-4">Addresses</h2>
+                {tempInfo.addresses.map((address, index) => (
+                  <div key={index} className="flex items-center justify-between p-2 border border-gray-300 rounded-lg mb-2">
+                    <span>{address.address}</span>
+                    <button
+                      onClick={() => handleRemoveAddress(address)}
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                <div className="flex items-center space-x-2">
                   <input
                     type="text"
-                    id="location"
-                    name="location"
-                    value={tempInfo.location}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    value={newAddress.address}
+                    onChange={handleAddressInputChange}
+                    placeholder="Enter new address"
+                    className="flex-grow px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
+                  <button
+                    onClick={handleAddAddress}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 text-sm"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             )}
