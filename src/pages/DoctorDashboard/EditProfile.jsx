@@ -44,17 +44,16 @@ const EditProfile = ({ doctorInfo, onSave, onClose }) => {
 
   const handleAddAddress = async () => {
     try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(newAddress.address)}&format=json`)
+      const response = await fetch(`https://api.geoapify.com/v1/geocode/search?text=${encodeURIComponent(newAddress.address)}&apiKey=${import.meta.env.VITE_GEO_CODE}`)
       const data = await response.json()
-      console.log(data)
-      if (data && data.length > 0) {
-        const { lat, lon, addresstype } = data[0]
+      if (data.features[0].properties.lat) {
+        const { lat, lon, result_type } = data.features[0].properties
         
         const addressData = {
           address: newAddress.address,
           lat,
           lon,
-          address_type: addresstype
+          address_type: result_type
         }
         console.log(addressData)
         const backendResponse = await fetch(google_ngrok_url+'/doctor/add_doctor_address/', {
