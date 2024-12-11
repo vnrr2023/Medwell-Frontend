@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css'
 import L from 'leaflet'
 import { Link } from "react-router-dom";
 import { google_ngrok_url } from '../../utils/global'
-import { MapPin, Search, AlertTriangle, Stethoscope, Pill, FileText, UserPlus } from 'lucide-react'
+import { MapPin, Search, AlertTriangle, Stethoscope, Pill, FileText, UserPlus, X, RefreshCw } from 'lucide-react'
 
 const DoctorIcon = new L.Icon({
   iconUrl: 'modiji.svg',
@@ -48,26 +48,39 @@ export default function DoctorSearch() {
   const [specialtyFilter, setSpecialtyFilter] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedDoctor, setSelectedDoctor] = useState(null)
-  const [locationOption, setLocationOption] = useState('current') // Updated
+  const [locationOption, setLocationOption] = useState('current') 
   const [userLocation, setUserLocation] = useState(null)
+  const [selectedSpecialties, setSelectedSpecialties] = useState([]) 
   const doctorsPerPage = 5
   const [districts] = useState([
     'Mumbai', 'Delhi', 'Bangalore', 'Hyderabad', 'Chennai', 
     'Kolkata', 'Pune', 'Ahmedabad', 'Jaipur', 'Lucknow'
   ])
+  const [availableSpecialties] = useState([
+    "General Physician", "Pediatrician", "Gynecologist", "Dermatologist", "Orthopedic Surgeon", "Cardiologist", "Neurologist"
+  ])
 
-  const searchNearbyDoctors = useCallback(async (lat, lon) => {
+  const searchNearbyDoctors = useCallback(async (lat, lon, specialties) => { 
     setLoading(true)
     setError(null)
     try {
-      const response = await axios.post(google_ngrok_url+'/search_doctors', {
-        latitude: lat,
-        longitude: lon
+      const response = await axios.post(google_ngrok_url+'/get_nearby_doctors/', {
+        lat: lat,
+        lon: lon,
+        specialties: specialties 
       })
-
-      if (response.data && response.data.length > 0) {
-        setDoctors(response.data)
-        setFilteredDoctors(response.data)
+      console.log("nearby:"+specialties,lat,lon)
+      if (response.data && response.data.data) {
+        const doctorsData = response.data.data.map(doctor => ({
+          id: doctor.user_id,
+          name: doctor.name,
+          specialty: doctor.speciality || 'General',
+          address: doctor.address,
+          latitude: doctor.location.lat,
+          longitude: doctor.location.lon
+        }))
+        setDoctors(doctorsData)
+        setFilteredDoctors(doctorsData)
       } else {
         setDoctors([])
         setFilteredDoctors([])
@@ -82,7 +95,7 @@ export default function DoctorSearch() {
     }
   }, [])
 
-  const handleLocationChange = async (e) => { // Updated
+  const handleLocationChange = async (e) => { 
     const selectedOption = e.target.value;
     setLocationOption(selectedOption);
 
@@ -91,7 +104,7 @@ export default function DoctorSearch() {
         (position) => {
           const { latitude, longitude } = position.coords;
           setMapCenter([latitude, longitude]);
-          searchNearbyDoctors(latitude, longitude);
+          searchNearbyDoctors(latitude, longitude, selectedSpecialties);
         },
         (error) => {
           console.error('Error getting current location:', error);
@@ -114,52 +127,113 @@ export default function DoctorSearch() {
 
       const [latitude, longitude] = dummyCoordinates[selectedOption] || [20.5937, 78.9629];
       setMapCenter([latitude, longitude]);
-      searchNearbyDoctors(latitude, longitude);
+      searchNearbyDoctors(latitude, longitude, selectedSpecialties);
     }
   }
 
-  const handleLocationSearch = async (e) => { // Updated
-    e.preventDefault()
+  // const handleLocationSearch = async (e) => { 
+  //   e.preventDefault()
+  //   setLoading(true)
+  //   setError(null)
+
+  //   try {
+  //     if (locationOption === 'current') {
+  //       navigator.geolocation.getCurrentPosition(
+  //         (position) => {
+  //           const { latitude, longitude } = position.coords
+  //           setMapCenter([latitude, longitude])
+  //           searchNearbyDoctors(latitude, longitude, selectedSpecialties)
+  //         },
+  //         (error) => {
+  //           console.error('Error getting current location:', error)
+  //           setError('Failed to get your current location. Please ensure location services are enabled.')
+  //           setLoading(false)
+  //         }
+  //       )
+  //     } else {
+  //       await searchNearbyDoctors(mapCenter[0], mapCenter[1], selectedSpecialties)
+  //     }
+  //   } catch (err) {
+  //     console.error('Error:', err)
+  //     setError(err.message || 'An error occurred while searching for doctors.')
+  //     setLoading(false)
+  //   }
+  // }
+
+  const handleMapClick = (latlng) => {
+    setMapCenter([latlng.lat, latlng.lng])
+    searchNearbyDoctors(latlng.lat, latlng.lng, selectedSpecialties)
+  }
+
+  const handleSearch = async (query) => {
+    if (!query) return
     setLoading(true)
     setError(null)
-
     try {
-      if (locationOption === 'current') {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            const { latitude, longitude } = position.coords
-            setMapCenter([latitude, longitude])
-            searchNearbyDoctors(latitude, longitude)
-          },
-          (error) => {
-            console.error('Error getting current location:', error)
-            setError('Failed to get your current location. Please ensure location services are enabled.')
-            setLoading(false)
-          }
-        )
+      const response = await axios.post(google_ngrok_url+'/search_doctors_and_hospitals/', {
+        query: query
+      })
+      console.log("Query:"+query)
+      if (response.data && response.data.data) {
+        const doctorsData = response.data.data.map(doctor => ({
+          id: doctor.user_id,
+          name: doctor.name,
+          specialty: doctor.speciality || 'General',
+          address: doctor.address,
+          latitude: doctor.location.lat,
+          longitude: doctor.location.lon
+        }))
+        setDoctors(doctorsData)
+        setFilteredDoctors(doctorsData)
+        if (doctorsData.length > 0) {
+          setMapCenter([doctorsData[0].latitude, doctorsData[0].longitude])
+        }
       } else {
-        // Use the coordinates set by handleLocationChange
-        await searchNearbyDoctors(mapCenter[0], mapCenter[1])
+        setDoctors([])
+        setFilteredDoctors([])
+        setError('No doctors found matching your search.')
       }
-    } catch (err) {
-      console.error('Error:', err)
-      setError(err.message || 'An error occurred while searching for doctors.')
+    } catch (error) {
+      console.error('Error searching doctors:', error)
+      setError('Failed to search doctors. Please try again.')
+    } finally {
       setLoading(false)
     }
   }
 
-  const handleMapClick = (latlng) => {
-    setMapCenter([latlng.lat, latlng.lng])
-    searchNearbyDoctors(latlng.lat, latlng.lng)
+  const handleBlurredClick = () => {
+    setIsBlurred(false)
+    if (locationOption === 'current') {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords
+          setMapCenter([latitude, longitude])
+          searchNearbyDoctors(latitude, longitude, selectedSpecialties)
+        },
+        (error) => {
+          console.error('Error getting current location:', error)
+          setError('Failed to get your current location. Please ensure location services are enabled.')
+        }
+      )
+    } else {
+      searchNearbyDoctors(mapCenter[0], mapCenter[1], selectedSpecialties)
+    }
+  }
+
+  const addSpecialty = (specialty) => {
+    if (!selectedSpecialties.includes(specialty)) {
+      setSelectedSpecialties([...selectedSpecialties, specialty])
+    }
+  }
+
+  const removeSpecialty = (specialty) => {
+    setSelectedSpecialties(selectedSpecialties.filter(s => s !== specialty))
   }
 
   useEffect(() => {
-    const filtered = doctors.filter(doctor => 
-      specialtyFilter === '' || doctor.specialty.toLowerCase().includes(specialtyFilter.toLowerCase())
-    )
-    setFilteredDoctors(filtered)
+    setFilteredDoctors(doctors)
     setCurrentPage(1)
-  }, [doctors, specialtyFilter])
+  }, [doctors])
 
   const indexOfLastDoctor = currentPage * doctorsPerPage
   const indexOfFirstDoctor = indexOfLastDoctor - doctorsPerPage
@@ -174,7 +248,10 @@ export default function DoctorSearch() {
         <h2 className="text-2xl text-white text-center mb-8">Find Your Doctor</h2>
 
         <div className="bg-white rounded-lg shadow-lg p-4 mb-8">
-          <form onSubmit={handleLocationSearch} className="flex flex-col md:flex-row gap-4">
+          <form onSubmit={(e) => {
+            e.preventDefault()
+            handleSearch(specialtyFilter)
+          }} className="flex flex-col md:flex-row gap-4">
             <div className="flex-1 flex items-center gap-2 border-b md:border-b-0 md:border-r border-gray-300 pb-4 md:pb-0 md:pr-4">
               <MapPin className="text-gray-400" />
               <select
@@ -204,18 +281,42 @@ export default function DoctorSearch() {
           </form>
         </div>
 
-        <div className="mb-8">
+        <div className="bg-white rounded-lg shadow-lg p-4 mb-8">
+          <h3 className="text-lg font-semibold mb-2">Select Specialties:</h3>
           <div className="flex flex-wrap gap-2">
-            {["Dermatologist", "Pediatrician", "Gynecologist", "Other"].map((specialty) => (
-              <button 
+            {availableSpecialties.map((specialty) => (
+              <button
                 key={specialty}
-                onClick={() => setSpecialtyFilter(specialty)}
-                className="px-3 py-1 bg-blue-600 text-white text-sm rounded-full hover:bg-blue-700 transition-colors"
+                onClick={() => addSpecialty(specialty)}
+                className={`px-3 py-1 rounded-full text-sm ${
+                  selectedSpecialties.includes(specialty)
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
               >
                 {specialty}
               </button>
             ))}
           </div>
+          {selectedSpecialties.length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {selectedSpecialties.map((specialty) => (
+                <div
+                  key={specialty}
+                  className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs flex items-center"
+                >
+                  {specialty}
+                  <button
+                    onClick={() => removeSpecialty(specialty)}
+                    className="ml-1 text-blue-600 hover:text-blue-800"
+                    aria-label={`Remove ${specialty} specialty`}
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="bg-white rounded-lg shadow-lg p-6">
@@ -253,7 +354,16 @@ export default function DoctorSearch() {
                 </div>
 
                 <div className="lg:w-1/2">
-                  <h2 className="text-2xl font-bold mb-4">Doctors</h2>
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-2xl font-bold">Doctors</h2>
+                    <button 
+                      onClick={() => searchNearbyDoctors(mapCenter[0], mapCenter[1], selectedSpecialties)}
+                      className="p-2 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors"
+                      aria-label="Refresh nearby doctors"
+                    >
+                      <RefreshCw className="h-5 w-5" />
+                    </button>
+                  </div>
                   {error && <p className="text-red-500 mb-4">{error}</p>}
                   <div className="space-y-4 max-h-[calc(100vh-450px)] overflow-y-auto pr-4">
                     {currentDoctors.map((doctor) => (
@@ -282,7 +392,7 @@ export default function DoctorSearch() {
             {isBlurred && (
               <div 
                 className="absolute inset-0 flex items-center justify-center z-10 cursor-pointer"
-                onClick={() => setIsBlurred(false)}
+                onClick={handleBlurredClick}
               >
                 <p className="text-2xl font-bold text-gray-800 bg-white bg-opacity-75 p-4 rounded-lg">
                   Click here to find nearby doctors
@@ -298,65 +408,67 @@ export default function DoctorSearch() {
           </div>
         </div>
 
-      <div className="bg-[#152a63] py-4 mt-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-center">
-            <Link to="/doctor/login" className="text-white hover:text-gray-200">
-              <div className="flex flex-col items-center">
-                <Stethoscope className="h-6 w-6 mb-1" />
-                <span>Doctor Login</span>
-              </div>
-            </Link>
-            <Link to="/login" className="text-white hover:text-gray-200">
-              <div className="flex flex-col items-center">
-                <Pill className="h-6 w-6 mb-1" />
-                <span>Patient Login</span>
-              </div>
-            </Link>
-            <Link to="/pricing" className="text-white hover:text-gray-200">
-              <div className="flex flex-col items-center">
-                <FileText className="h-6 w-6 mb-1" />
-                <span>Pricing</span>
-              </div>
-            </Link>
-            <a href="#" className="text-white hover:text-gray-200">
-              <div className="flex flex-col items-center">
-                <AlertTriangle className="h-6 w-6 mb-1" />
-                <span>Book test</span>
-              </div>
-            </a>
-            <a href="#" className="text-white hover:text-gray-200">
-              <div className="flex flex-col items-center">
-                <Search className="h-6 w-6 mb-1" />
-                <span>Read articles</span>
-              </div>
-            </a>
-            <Link to="/auth" className="text-white hover:text-gray-200">
-              <div className="flex flex-col items-center">
-                <UserPlus className="h-6 w-6 mb-1" />
-                <span>Get Started</span>
-              </div>
-            </Link>
-          </div>
-        </div>
-      </div>
 
-      {selectedDoctor && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-30">
-          <div className="bg-white p-6 rounded-lg max-w-md w-full">
-            <h2 className="text-2xl font-bold mb-4">{selectedDoctor.name}</h2>
-            <p><strong>Specialty:</strong> {selectedDoctor.specialty}</p>
-            <p><strong>Address:</strong> {selectedDoctor.address}</p>
-            <button 
-              onClick={() => setSelectedDoctor(null)}
-              className="mt-4 bg-blue-500 text-white px-4 py-2 rounded"
-            >
-              Close
-            </button>
+        <div className="bg-[#152a63] py-4 mt-8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-center">
+              <Link to="/doctor/login" className="text-white hover:text-gray-200">
+                <div className="flex flex-col items-center">
+                  <Stethoscope className="h-6 w-6 mb-1" />
+                  <span>Doctor Login</span>
+                </div>
+              </Link>
+              <Link to="/login" className="text-white hover:text-gray-200">
+                <div className="flex flex-col items-center">
+                  <Pill className="h-6 w-6 mb-1" />
+                  <span>Patient Login</span>
+                </div>
+              </Link>
+              <Link to="/pricing" className="text-white hover:text-gray-200">
+                <div className="flex flex-col items-center">
+                  <FileText className="h-6 w-6 mb-1" />
+                  <span>Pricing</span>
+                </div>
+              </Link>
+              <a href="#" className="text-white hover:text-gray-200">
+                <div className="flex flex-col items-center">
+                  <AlertTriangle className="h-6 w-6 mb-1" />
+                  <span>Book test</span>
+                </div>
+              </a>
+              <a href="#" className="text-white hover:text-gray-200">
+                <div className="flex flex-col items-center">
+                  <Search className="h-6 w-6 mb-1" />
+                  <span>Read articles</span>
+                </div>
+              </a>
+              <Link to="/auth" className="text-white hover:text-gray-200">
+                <div className="flex flex-col items-center">
+                  <UserPlus className="h-6 w-6 mb-1" />
+                  <span>Get Started</span>
+                </div>
+              </Link>
+            </div>
           </div>
         </div>
-      )}
-    </div>
+
+        {selectedDoctor && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-30">
+            <div className="bg-white p-6 rounded-lg max-w-md w-full">
+              <h2 className="text-2xl font-bold mb-4">{selectedDoctor.name}</h2>
+              <p><strong>Specialty:</strong> {selectedDoctor.specialty}</p>
+              <p><strong>Address:</strong> {selectedDoctor.address}</p>
+              <button 
+                onClick={() => setSelectedDoctor(null)}
+                className="mt-4 bg-blue-500 text-white px-4 py-2 rounded"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
+
